@@ -44,6 +44,15 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <cstdio>
+// for sysctl to get ncpu
+#include <sys/types.h>
+#include <sys/sysctl.h>
+// for cpuset
+#include <sys/param.h>
+#include <sys/cpuset.h>
+// for pthread_np
+#include <pthread_np.h>
+
 
 namespace {
 
@@ -59,7 +68,7 @@ namespace {
       return result;
     }
 
-  void make_file(std::string const &dir, int which)
+  void make_file(std::string const &dir, int which, int core)
   {
     char buf[1024];
     std::random_device rd;
@@ -68,6 +77,19 @@ namespace {
     auto len_dis = std::uniform_int_distribution<std::uint16_t>(50, 140);
 
     std::uint64_t key = 0u;
+
+    // Create a cpu_set_t object representing a set of CPUs. Clear it and mark
+    // only CPU i as set.
+    cpuset_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core, &cpuset);
+    int rc = pthread_setaffinity_np(::pthread_self(),
+        sizeof(cpuset_t), &cpuset);
+    if (rc != 0) {
+      std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+    }
+    std::cerr << std::endl << "Affinity set to cpu " << core << "." << std::endl << std::endl;
+
 
     char fbuf[256];
     ::sprintf(fbuf, "%s/INPUT/file.%03d", dir.c_str(), which);
@@ -101,10 +123,29 @@ int main(int argc, char * argv[])
     return 1;
   }
   std::string dir = argv[1];
+
+
+  int i, mib[4];
+  size_t len{sizeof(mib)};
+
+  int ret = ::sysctlnametomib("hw.ncpu", mib, &len);
+  int ncpu;
+  ::sysctl(mib, 2, &ncpu, &len, NULL, 0);
+  std::cerr << "number of cpus: = " << ncpu << std::endl;
+  auto nconcurrency = std::thread::hardware_concurrency();
+  std::cerr << "hardware_concurrency: " << nconcurrency << std::endl;
+
+
   std::vector<std::thread> threads;
-  for (int i = 0; i < 100; ++i) {
-    threads.emplace_back(make_file, dir, i);
+  size_t total_files{100}, total{0};
+  while(total < total_files)
+  {
+    for (uint8_t cpus=0; (cpus < ncpu) && total<total_files; ++total) {
+      threads.emplace_back(make_file, dir, total, cpus++);
+    }
+
+    for (auto &t: threads) t.join();
+    threads.clear();
   }
-  for (auto &t: threads) t.join();
   return 0;
 }

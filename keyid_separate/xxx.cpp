@@ -40,6 +40,15 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+// for sysctl to get ncpu
+#include <sys/types.h>
+#include <sys/sysctl.h>
+// for cpuset
+#include <sys/param.h>
+#include <sys/cpuset.h>
+// for pthread_np
+#include <pthread_np.h>
+
 
 namespace {
   struct FD
@@ -72,6 +81,8 @@ namespace {
       auto filesz = std::size_t(status.st_size);
 #if defined(__linux__)
       constexpr int map_flags = MAP_SHARED;
+#elif defined(__FreeBSD__)
+      constexpr int map_flags = MAP_SHARED | MAP_NOCORE | MAP_ALIGNED_SUPER | MAP_NOSYNC;;
 #else
       constexpr int map_flags = MAP_SHARED | MAP_NOCORE;
 #endif
@@ -81,6 +92,10 @@ namespace {
       }
 #if defined(__linux__)
       if (::madvise(addr, filesz, MADV_DONTDUMP) != 0) {
+        return result;
+      }
+#elif defined(__FreeBSD__)
+      if (::madvise(addr, filesz, MADV_RANDOM) != 0) {
         return result;
       }
 #endif
@@ -169,7 +184,7 @@ namespace {
     }
   };
 
-  void do_work(std::string const &dir, std::uint64_t which)
+  void do_work(std::string const &dir, std::uint64_t which, int core)
   {
     Table table(dir + "/HT");
 
@@ -178,6 +193,19 @@ namespace {
     std::mt19937 rng(rd());
     auto char_dis = std::uniform_int_distribution<char>('A', 'Z');
     auto len_dis = std::uniform_int_distribution<std::size_t>(50, 140);
+
+    // Create a cpu_set_t object representing a set of CPUs. Clear it and mark
+    // only CPU i as set.
+    cpuset_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core, &cpuset);
+    int rc = pthread_setaffinity_np(::pthread_self(),
+        sizeof(cpuset_t), &cpuset);
+    if (rc != 0) {
+      std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+    }
+    std::cerr << std::endl << "Affinity set to cpu " << core << "." << std::endl << std::endl;
+
 
     which <<= 64-5;
     for (int f = 0; f < 100; ++f) {
@@ -219,12 +247,24 @@ int main(int argc, char * argv[])
     return 1;
   }
   std::string dir = argv[1];
+
+  auto ncpu = std::thread::hardware_concurrency();
+  std::cerr << "hardware_concurrency: " << ncpu << std::endl;
+
+
+
+  size_t total_coordinators{64}, total{0};
+
   std::vector<std::thread> threads;
-  for (int i = 0; i < 64; ++i) {
-    threads.emplace_back(do_work, dir, i);
-  }
-  for (auto &t: threads) {
-    t.join();
+  while(total < total_coordinators)
+  {
+    for (uint8_t cpus = 0; (cpus < ncpu) && total < total_coordinators; ++total) {
+      threads.emplace_back(do_work, dir, total, cpus++);
+    }
+    for (auto &t: threads) {
+      t.join();
+    }
+    threads.clear();
   }
   return 0;
 }
