@@ -104,7 +104,7 @@ namespace {
       return result;
     }
 
-  constexpr auto num_tables = std::size_t(64);
+  //constexpr auto num_tables = std::size_t(64);
 
   struct Table
   {
@@ -188,7 +188,6 @@ namespace {
   {
     Table table(dir + "/HT");
 
-    char buf[1024];
     std::random_device rd;
     std::mt19937 rng(rd());
     auto char_dis = std::uniform_int_distribution<char>('A', 'Z');

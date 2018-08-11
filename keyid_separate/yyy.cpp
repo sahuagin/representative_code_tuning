@@ -125,15 +125,15 @@ int main(int argc, char * argv[])
   std::string dir = argv[1];
 
 
-  int i, mib[4];
-  size_t len{sizeof(mib)};
 
-  int ret = ::sysctlnametomib("hw.ncpu", mib, &len);
-  int ncpu;
-  ::sysctl(mib, 2, &ncpu, &len, NULL, 0);
-  std::cerr << "number of cpus: = " << ncpu << std::endl;
-  auto nconcurrency = std::thread::hardware_concurrency();
-  std::cerr << "hardware_concurrency: " << nconcurrency << std::endl;
+  //int mib[4];
+  //size_t len{sizeof(mib)};
+  //int ret = ::sysctlnametomib("hw.ncpu", mib, &len);
+  //int ncpu;
+  //::sysctl(mib, 2, &ncpu, &len, NULL, 0);
+  //std::cerr << "number of cpus: = " << ncpu << std::endl;
+  auto ncpu = std::thread::hardware_concurrency();
+  std::cerr << "hardware_concurrency: " << ncpu << std::endl;
 
 
   std::vector<std::thread> threads;
