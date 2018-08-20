@@ -98,6 +98,13 @@ namespace {
       std::cerr << "error: \"" << fbuf << "\": " << strerror(errno) << std::endl;
       return;
     }
+    char fkbuf[256];
+    ::sprintf(fkbuf, "%s/INPUT/file_key.%03d", dir.c_str(), which);
+    FILE *key_fp = ::fopen(fkbuf, "w+");
+    if (key_fp == nullptr) {
+      std::cerr << "error: \"" << fkbuf << "\": " << strerror(errno) << std::endl;
+      return;
+    }
 
     for (int i = 0; i < 305000000/100; ++i) {
       auto const len = len_dis(rng);
@@ -106,12 +113,14 @@ namespace {
       }
       buf[len] = '\0';
       std::uint64_t h = hash(buf);
-      ::fwrite(&key, sizeof(key), 1, fp);
+      //::fwrite(&key, sizeof(key), 1, fp);
+      ::fwrite(&key, sizeof(key), 1, key_fp);
       ::fwrite(&h, sizeof(h), 1, fp);
       ::fwrite(&len, sizeof(len), 1, fp);
       ::fwrite(buf, 1, len, fp);
     }
     ::fclose(fp);
+    ::fclose(key_fp);
   }
 
 }

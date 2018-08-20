@@ -71,7 +71,7 @@ namespace {
   };
 
   std::pair<void *, std::size_t>
-    map_file(int fd)
+    map_file(int fd, bool write=true)
     {
       std::pair<void *, std::size_t> result{nullptr, 0u};
       struct stat status;
@@ -79,14 +79,25 @@ namespace {
         return result;
       }
       auto filesz = std::size_t(status.st_size);
+      int map_flags=0;
+      int read_write=PROT_READ;
+      if(true==write)
+      {
+        read_write |= PROT_WRITE;
+        map_flags  |= MAP_SHARED;
+      }
+      else
+      {
+        map_flags |= MAP_PRIVATE;
+      }
 #if defined(__linux__)
-      constexpr int map_flags = MAP_SHARED;
+      // nothing
 #elif defined(__FreeBSD__)
-      constexpr int map_flags = MAP_SHARED | MAP_NOCORE | MAP_ALIGNED_SUPER | MAP_NOSYNC;;
+      map_flags = map_flags | MAP_NOCORE | MAP_ALIGNED_SUPER | MAP_NOSYNC;
 #else
-      constexpr int map_flags = MAP_SHARED | MAP_NOCORE;
+      map_flags = map_flags | MAP_NOCORE;
 #endif
-      auto addr = ::mmap(nullptr, filesz, PROT_READ|PROT_WRITE, map_flags, fd, 0);
+      auto addr = ::mmap(nullptr, filesz, read_write, map_flags, fd, 0);
       if (addr == MAP_FAILED) {
         return result;
       }
@@ -210,12 +221,31 @@ namespace {
     for (int f = 0; f < 100; ++f) {
       char fname[128];
       ::sprintf(fname, "%s/INPUT/file.%03d", dir.c_str(), f);
-      auto fd = FD(::open(fname, O_RDWR));
+      //auto fd = FD(::open(fname, O_RDWR));
+      auto fd = FD(::open(fname, O_RDONLY));
       if (fd < 0) {
         std::cerr << "open: " << ::strerror(errno) << std::endl;
         return;
       }
-      auto map = map_file(fd);
+
+      char buf[2*1024];
+      ::sprintf(buf, "%s/INPUT/file_key.%03d", dir.c_str(), f);
+      auto key_fd = FD(::open(buf, O_RDWR));
+      if (key_fd < 0)
+      {
+        std::cerr << "open: " << ::strerror(errno) << std::endl;
+        return;
+      }
+
+      auto key_map = map_file(key_fd, true);
+      if (key_map.first == nullptr) {
+        std::cerr << "map_file: " << ::strerror(errno) << std::endl;
+        return;
+      }
+      auto key_data = reinterpret_cast<std::uint64_t *>(key_map.first);
+      auto const key_data_end = key_data + key_map.second;
+
+      auto map = map_file(fd, false);
       if (map.first == nullptr) {
         std::cerr << "map_file: " << ::strerror(errno) << std::endl;
         return;
@@ -223,17 +253,21 @@ namespace {
       auto data = static_cast<std::uint8_t *>(map.first);
       auto const data_end = data + map.second;
 
-      while (data < data_end) {
-        auto key_ptr = reinterpret_cast<std::uint64_t *>(data);
-        auto hash_ptr = key_ptr + 1;
+      while ((data < data_end) && (key_data < key_data_end)) {
+        //auto key_ptr = reinterpret_cast<std::uint64_t *>(data);
+        auto key_ptr = reinterpret_cast<std::uint64_t *>(key_data++);
+        //auto hash_ptr = key_ptr + 1;
+        auto hash_ptr = reinterpret_cast<std::uint64_t *>(data);
         auto len_ptr = reinterpret_cast<std::uint16_t *>(hash_ptr + 1);
         auto buf_ptr = reinterpret_cast<char *>(len_ptr + 1);
         if ((*hash_ptr & 0xfc00000000000000ul) == which) {
           *key_ptr = table.insert(buf_ptr, *len_ptr, *hash_ptr);
         }
         data = reinterpret_cast<std::uint8_t *>(buf_ptr + *len_ptr);
+        //++key_ptr;
       }
       ::munmap(map.first, map.second);
+      ::munmap(key_map.first, key_map.second);
     }
   }
 
