@@ -106,6 +106,14 @@ namespace {
       return;
     }
 
+    char fhbuf[256];
+    ::sprintf(fhbuf, "%s/INPUT/file_hash.%03d", dir.c_str(), which);
+    FILE *hash_fp = ::fopen(fhbuf, "w+");
+    if (hash_fp == nullptr) {
+      std::cerr << "error: \"" << fhbuf << "\": " << strerror(errno) << std::endl;
+      return;
+    }
+
     for (int i = 0; i < 305000000/100; ++i) {
       auto const len = len_dis(rng);
       for (std::uint16_t j = 0; j < len; ++j) {
@@ -115,12 +123,14 @@ namespace {
       std::uint64_t h = hash(buf);
       //::fwrite(&key, sizeof(key), 1, fp);
       ::fwrite(&key, sizeof(key), 1, key_fp);
-      ::fwrite(&h, sizeof(h), 1, fp);
+      //::fwrite(&h, sizeof(h), 1, fp);
+      ::fwrite(&h, sizeof(h), 1, hash_fp);
       ::fwrite(&len, sizeof(len), 1, fp);
       ::fwrite(buf, 1, len, fp);
     }
     ::fclose(fp);
     ::fclose(key_fp);
+    ::fclose(hash_fp);
   }
 
 }

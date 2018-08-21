@@ -224,16 +224,26 @@ namespace {
       //auto fd = FD(::open(fname, O_RDWR));
       auto fd = FD(::open(fname, O_RDONLY));
       if (fd < 0) {
-        std::cerr << "open: " << ::strerror(errno) << std::endl;
+        std::cerr << "open(" << fname << ": " << ::strerror(errno) << std::endl;
         return;
       }
+      auto map = map_file(fd, false);
+      if (map.first == nullptr) {
+         std::cerr << "map_file: " << ::strerror(errno) << std::endl;
+         return;
+       }
+
+      auto data = static_cast<std::uint8_t *>(map.first);
+      auto const data_end = data + map.second;
+
+
 
       char buf[2*1024];
       ::sprintf(buf, "%s/INPUT/file_key.%03d", dir.c_str(), f);
       auto key_fd = FD(::open(buf, O_RDWR));
       if (key_fd < 0)
       {
-        std::cerr << "open: " << ::strerror(errno) << std::endl;
+        std::cerr << "open(" << buf << ": " << ::strerror(errno) << std::endl;
         return;
       }
 
@@ -244,30 +254,43 @@ namespace {
       }
       auto key_data = reinterpret_cast<std::uint64_t *>(key_map.first);
       auto const key_data_end = key_data + key_map.second;
+////////////////////////////////
+      char hash_buf[2*1024];
+      ::sprintf(hash_buf, "%s/INPUT/file_hash.%03d", dir.c_str(), f);
+      auto hash_fd = FD(::open(hash_buf, O_RDWR));
+      if (hash_fd < 0)
+      {
+        std::cerr << "open(" << hash_buf << ": " << ::strerror(errno) << std::endl;
+        return;
+      }
 
-      auto map = map_file(fd, false);
-      if (map.first == nullptr) {
+      auto hash_map = map_file(hash_fd, false);
+      if (hash_map.first == nullptr) {
         std::cerr << "map_file: " << ::strerror(errno) << std::endl;
         return;
       }
-      auto data = static_cast<std::uint8_t *>(map.first);
-      auto const data_end = data + map.second;
+      auto hash_data = reinterpret_cast<std::uint64_t *>(hash_map.first);
+      auto const hash_data_end = hash_data + hash_map.second;
+//////////////////////////////////
 
-      while ((data < data_end) && (key_data < key_data_end)) {
+      while ((data < data_end) && (key_data < key_data_end) && (hash_data < hash_data_end)) {
         //auto key_ptr = reinterpret_cast<std::uint64_t *>(data);
-        auto key_ptr = reinterpret_cast<std::uint64_t *>(key_data++);
+        auto key_ptr = reinterpret_cast<std::uint64_t *>(key_data);
         //auto hash_ptr = key_ptr + 1;
-        auto hash_ptr = reinterpret_cast<std::uint64_t *>(data);
-        auto len_ptr = reinterpret_cast<std::uint16_t *>(hash_ptr + 1);
+        //auto hash_ptr = reinterpret_cast<std::uint64_t *>(data);
+        auto hash_ptr = hash_data++;
+        auto len_ptr = reinterpret_cast<std::uint16_t *>(data);
         auto buf_ptr = reinterpret_cast<char *>(len_ptr + 1);
         if ((*hash_ptr & 0xfc00000000000000ul) == which) {
           *key_ptr = table.insert(buf_ptr, *len_ptr, *hash_ptr);
+          ++key_ptr;
         }
         data = reinterpret_cast<std::uint8_t *>(buf_ptr + *len_ptr);
         //++key_ptr;
       }
       ::munmap(map.first, map.second);
       ::munmap(key_map.first, key_map.second);
+      ::munmap(hash_map.first, hash_map.second);
     }
   }
 
