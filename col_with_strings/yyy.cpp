@@ -68,6 +68,40 @@ namespace {
       return result;
     }
 
+  bool open_files(int which, const std::string &dir, FILE *&fp, FILE *&hash_fp, FILE *&key_fp, FILE *&data_fp)
+  {
+    const std::string filenames[] = { "%s/INPUT/file.%03d", "%s/INPUT/file_hash.%03d","%s/INPUT/file_key.%03d", "%s/INPUT/data_runon.%03d" };
+    uint16_t count(0);
+    for(auto &filename : filenames)
+    {
+      char fbuf[256];
+      ::memset(fbuf, 0, 256);
+      //std::cerr << filename << std::endl;
+      ::sprintf(fbuf, filename.c_str(), dir.c_str(), which);
+      //std::cerr << fbuf << std::endl;
+      FILE *tfp = ::fopen(fbuf, "w+");
+      if (tfp == nullptr) {
+        std::cerr << "error: \"" << fbuf << "\": " << strerror(errno) << std::endl;
+        return false;
+      }
+      switch(count++)
+      {
+        case 0: fp = tfp;
+                break;
+        case 1: hash_fp = tfp;
+                break;
+        case 2: key_fp = tfp;
+                break;
+        case 3: data_fp = tfp;
+                break;
+        default: std::cerr << "OH DOH!" << std::endl;
+                 return false;
+                 break;
+      }
+    }
+    return true;
+  }
+
   void make_file(std::string const &dir, int which, int core)
   {
     char buf[1024];
@@ -90,29 +124,12 @@ namespace {
     }
     std::cerr << std::endl << "Affinity set to cpu " << core << "." << std::endl << std::endl;
 
-
-    char fbuf[256];
-    ::sprintf(fbuf, "%s/INPUT/file.%03d", dir.c_str(), which);
-    FILE *fp = ::fopen(fbuf, "w+");
-    if (fp == nullptr) {
-      std::cerr << "error: \"" << fbuf << "\": " << strerror(errno) << std::endl;
-      return;
-    }
-    char fkbuf[256];
-    ::sprintf(fkbuf, "%s/INPUT/file_key.%03d", dir.c_str(), which);
-    FILE *key_fp = ::fopen(fkbuf, "w+");
-    if (key_fp == nullptr) {
-      std::cerr << "error: \"" << fkbuf << "\": " << strerror(errno) << std::endl;
+    FILE *fp=0, *hash_fp=0, *key_fp=0, *data_fp=0;
+    if(false == open_files(which, dir, fp, hash_fp, key_fp, data_fp))
+    {
       return;
     }
 
-    char fhbuf[256];
-    ::sprintf(fhbuf, "%s/INPUT/file_hash.%03d", dir.c_str(), which);
-    FILE *hash_fp = ::fopen(fhbuf, "w+");
-    if (hash_fp == nullptr) {
-      std::cerr << "error: \"" << fhbuf << "\": " << strerror(errno) << std::endl;
-      return;
-    }
 
     for (int i = 0; i < 305000000/100; ++i) {
       auto const len = len_dis(rng);
@@ -126,11 +143,12 @@ namespace {
       //::fwrite(&h, sizeof(h), 1, fp);
       ::fwrite(&h, sizeof(h), 1, hash_fp);
       ::fwrite(&len, sizeof(len), 1, fp);
-      ::fwrite(buf, 1, len, fp);
+      ::fwrite(buf, 1, len, data_fp);
     }
     ::fclose(fp);
     ::fclose(key_fp);
     ::fclose(hash_fp);
+    ::fclose(data_fp);
   }
 
 }
