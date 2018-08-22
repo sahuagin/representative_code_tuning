@@ -294,16 +294,19 @@ namespace {
 ////////////////
 //
       std::uint64_t record_num = 0;
+      std::uint64_t max_records=(key_data_end-key_data)/sizeof(key_data);
+
       std::uint64_t  data_seek = 0;
-      while ((runon_data+data_seek < runon_data_end) && 
+      while (( record_num < max_records) &&
+          (runon_data+data_seek < runon_data_end) && 
           (key_data+record_num < key_data_end) && 
           (hash_data+record_num < hash_data_end) &&
-          (len+record_num < len_end)) {
-        auto key_ptr = reinterpret_cast<std::uint64_t *>(key_data+record_num);
+          (len+record_num+*(len+record_num) < len_end)) {
+        auto key_ptr = reinterpret_cast<std::uint64_t *>(key_data)+record_num;
 
         //auto hash_ptr = hash_data++;
         auto hash_ptr = hash_data + record_num;
-        auto len_ptr = reinterpret_cast<std::uint16_t *>(len+record_num);
+        auto len_ptr = reinterpret_cast<std::uint16_t *>(len)+record_num;
         //auto buf_ptr = reinterpret_cast<char *>(len_ptr + 1);
         if ((*hash_ptr & 0xfc00000000000000ul) == which) {
           const char * buf_ptr = reinterpret_cast<const char *>( runon_data ) + data_seek;
@@ -312,7 +315,7 @@ namespace {
         }
         //std::cerr << "len_ptr=" << *len_ptr << std::endl;
         data_seek += *len_ptr; // size of the string
-        ++data_seek; // move past null
+        ////++data_seek; // move past null
         //std::cerr << "data_seek="<< data_seek << std::endl;
         //std::cerr << "record_num="<< record_num << std::endl;
         ++record_num;
