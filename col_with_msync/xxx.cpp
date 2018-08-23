@@ -93,7 +93,8 @@ namespace {
 #if defined(__linux__)
       // nothing
 #elif defined(__FreeBSD__)
-      map_flags = map_flags | MAP_NOCORE | MAP_ALIGNED_SUPER | MAP_NOSYNC;
+      //map_flags = map_flags | MAP_NOCORE | MAP_ALIGNED_SUPER | MAP_NOSYNC;
+      map_flags = map_flags | MAP_NOCORE | MAP_ALIGNED_SUPER;
 #else
       map_flags = map_flags | MAP_NOCORE;
 #endif
