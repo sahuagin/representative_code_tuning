@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
-sysctl vfs.write.behind
-sysctl vm.pmap_pg_ps_enabled
+sysctl vfs.write_behind
+sysctl vm.pmap.pg_ps_enabled
 sysctl vm.disable_swapspace_pageouts
 sysctl vfs.zfs.arc_max
 sysctl vfs.zfs.arc_min
 sysctl hw.ncpu
-sysctl machinedep.hyperthreading_allowed
+sysctl machdep.hyperthreading_allowed
 
 zfs get mountpoint test2/yyy_INPUT
 zfs get compression test2/yyy_INPUT

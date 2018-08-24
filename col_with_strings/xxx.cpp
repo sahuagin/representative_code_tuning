@@ -106,8 +106,8 @@ namespace {
         return result;
       }
 #elif defined(__FreeBSD__)
-      //if (::madvise(addr, filesz, MADV_RANDOM) != 0) {
-      if (::madvise(addr, filesz, MADV_SEQUENTIAL) != 0) {
+      if (::madvise(addr, filesz, MADV_RANDOM) != 0) {
+      //if (::madvise(addr, filesz, MADV_SEQUENTIAL) != 0) {
         return result;
       }
 #endif
