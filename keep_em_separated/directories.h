@@ -3,7 +3,7 @@ static const std::string IN_HASH{ IN + "hashid/"};
 static const std::string IN_KEY{ IN + "keyid/"};
 static const std::string IN_DATA{ IN + "data/"};
 
-static const std::string HT{"HT/"};
+static const std::string HT{"/HT"};
 static const std::string HT_TABLE{HT + "/table"};
 static const std::string HT_DATA{HT + "/data"};
 

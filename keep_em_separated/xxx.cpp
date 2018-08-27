@@ -216,7 +216,7 @@ namespace {
   void do_work(std::string const &dir, std::uint64_t which, int core)
   {
     //Table table(dir + "/HT");
-    Table table(dir + HT);
+    Table table(dir);
 
     std::random_device rd;
     std::mt19937 rng(rd());
@@ -262,11 +262,27 @@ namespace {
       // and open for write
       char fname[128];
       ::sprintf(fname, IN_FILE_KEY.c_str(), dir.c_str(), f);
-      auto keyid_fd = FD(::open(fname,O_RDWR | O_CREAT)); // O_SYNC ?
+      auto keyid_fd = FD(::open(fname, O_RDWR )); // O_SYNC ?
+      if (keyid_fd < 0)
+      {
+        std::cerr << "open(" << fname << ": " << ::strerror(errno) << std::endl;
+        return;
+      }
+
+      /*
+      auto key_map = map_file(hash_fd, false);
+      if (key_map.first == nullptr) {
+        std::cerr << "map_file: " << ::strerror(errno) << std::endl;
+        return;
+      }
+      auto key_data = reinterpret_cast<std::uint64_t *>(key_map.first);
+
+      auto const key_data_end = key_data + key_map.second;
+      */
 
 
 
-////////////////////////////////
+
       char hash_buf[2*1024];
       ::sprintf(hash_buf, IN_FILE_HASH.c_str(), dir.c_str(), f);
       auto hash_fd = FD(::open(hash_buf, O_RDONLY));
@@ -281,12 +297,26 @@ namespace {
         std::cerr << "map_file: " << ::strerror(errno) << std::endl;
         return;
       }
-      //auto hash_data = reinterpret_cast<std::uint64_t *>(hash_map.first);
-      auto hash_data = reinterpret_cast<rec *>(hash_map.first);
+      auto hash_data = reinterpret_cast<std::uint64_t *>(hash_map.first);
 
       auto const hash_data_end = hash_data + hash_map.second;
-      //auto len = reinterpret_cast<std::uint16_t *>(hash_data+1);
-//////////////////////////////////
+
+      char len_buf[2*1024];
+      ::sprintf(len_buf, IN_FILE_LEN.c_str(), dir.c_str(), f);
+      auto len_fd = FD(::open(len_buf, O_RDONLY));
+      if (len_fd < 0)
+      {
+        std::cerr << "open(" << len_buf << ": " << ::strerror(errno) << std::endl;
+        return;
+      }
+
+      auto len_map = map_file(len_fd, false);
+      if (len_map.first == nullptr) {
+        std::cerr << "map_file: " << ::strerror(errno) << std::endl;
+        return;
+      }
+      auto len_data = reinterpret_cast<std::uint16_t *>(len_map.first);
+
       char data_buf[2*1024];
       ::sprintf(data_buf, IN_FILE_DATA.c_str(), dir.c_str(), f);
       auto data_fd = FD(::open(data_buf, O_RDONLY));
@@ -301,13 +331,14 @@ namespace {
         std::cerr << "map_file: " << ::strerror(errno) << std::endl;
         return;
       }
-      auto const runon_data = reinterpret_cast<std::uint8_t *>(data_map.first);
+      //auto const runon_data = reinterpret_cast<std::uint8_t *>(data_map.first);
+      auto const runon_data = reinterpret_cast<char *>(data_map.first);
       //auto const runon_data_end = runon_data + data_map.second;
 
       std::uint64_t record_num = 0;
 
       //std::uint64_t max_records=(key_data_end-key_data)/sizeof(key_data);
-      std::uint64_t max_records=(hash_data_end - hash_data)/sizeof(rec);
+      std::uint64_t max_records=(hash_data_end - hash_data)/sizeof(std::uint64_t);
 
       std::uint64_t  data_seek = 0;
       while (( record_num < max_records)){/* &&
@@ -318,21 +349,24 @@ namespace {
         */
 
         auto hash_ptr = hash_data + record_num;
-        if ((hash_ptr->hash & 0xfc00000000000000ul) == which) {
+        auto len_ptr  = len_data  + record_num;
+        if ((*hash_ptr & 0xfc00000000000000ul) == which) {
           const char * buf_ptr = reinterpret_cast<const char *>( runon_data  + data_seek);
-          auto key = table.insert(buf_ptr, hash_ptr->len, hash_ptr->hash);
+          auto key = table.insert(buf_ptr, *len_ptr, *hash_ptr);
           auto written = ::pwrite(keyid_fd, 
               reinterpret_cast<const void *>(&key), sizeof(key), static_cast<off_t>(record_num*sizeof(key)));
           if(written != sizeof(key))
           {
+            std::cerr << "pwrite error = " << strerror(errno) << std::endl;
             std::cerr << "keyfile wrote " << written << ":" << sizeof(key) << " bytes." << std::endl;
           }
         }
-        data_seek += hash_ptr->len; // size of the string
+        data_seek += *len_ptr; // size of the string
         ++record_num;
       }
       ::munmap(hash_map.first, hash_map.second);
       ::munmap(data_map.first, data_map.second);
+      ::munmap(len_map.first, len_map.second);
     }
   }
 

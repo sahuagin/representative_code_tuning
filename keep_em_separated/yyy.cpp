@@ -79,11 +79,12 @@ namespace {
    */
   bool open_files(int which, 
                   const std::string &dir, 
+                  FILE *&key_fp,
                   FILE *&hash_fp, 
-                  FILE *&length_fp, 
-                  FILE *&data_fp)
+                  FILE *&data_fp,
+                  FILE *&length_fp) 
   {
-    const std::string filenames[] = { IN_FILE_HASH, IN_FILE_DATA, IN_FILE_LEN };
+    const std::string filenames[] = { IN_FILE_KEY, IN_FILE_HASH, IN_FILE_DATA, IN_FILE_LEN };
     uint16_t count(0);
     for(auto &filename : filenames)
     {
@@ -100,11 +101,13 @@ namespace {
 
       switch(count++)
       {
-        case 0: hash_fp = tfp; 
+        case 0: key_fp = tfp; 
                 break;
-        case 1: data_fp = tfp;
+        case 1: hash_fp = tfp; 
                 break;
-        case 2: length_fp = tfp;
+        case 2: data_fp = tfp;
+                break;
+        case 3: length_fp = tfp;
                 break;
         default: std::cerr << "OH DOH!" << std::endl;
                  return false;
@@ -136,8 +139,8 @@ namespace {
     }
     std::cerr << std::endl << "Affinity set to cpu " << core << "." << std::endl << std::endl;
 
-    FILE *hash_fp=0, *data_fp=0, *len_fp;
-    if(false == open_files(which, dir, hash_fp, len_fp, data_fp))
+    FILE *key_fp=0, *hash_fp=0, *data_fp=0, *len_fp;
+    if(false == open_files(which, dir, key_fp, hash_fp, data_fp, len_fp))
     {
       return;
     }
@@ -152,6 +155,8 @@ namespace {
 
     std::vector<char> data_out;
     data_out.reserve(140*multiple);
+
+    std::vector<std::uint64_t> key_out(multiple, 0);
 
     for (int i = 0; i < 305000000/100; ++i) {
       auto iterate = i%multiple;
@@ -171,6 +176,7 @@ namespace {
         ::fwrite(hash_out.data(), sizeof(uint64_t), hash_out.size(), hash_fp);
         ::fwrite(data_out.data(), sizeof(char) , data_out.size(), data_fp);
         ::fwrite(length_out.data(), sizeof(uint16_t) , length_out.size() , len_fp);
+        ::fwrite(key_out.data(), sizeof(uint64_t), key_out.size(), key_fp);
         hash_out.clear();
         hash_out.reserve(multiple);
         data_out.clear();
@@ -182,6 +188,7 @@ namespace {
     ::fclose(hash_fp);
     ::fclose(data_fp);
     ::fclose(len_fp);
+    ::fclose(key_fp);
 
   }
 }
