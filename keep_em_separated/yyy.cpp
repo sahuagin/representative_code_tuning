@@ -77,9 +77,13 @@ namespace {
    * key_fp is for keyids only // XXX eventually, this won't be created here, it'll only be created by the xxx program
    * data_fp is for the variable length data only
    */
-  bool open_files(int which, const std::string &dir, FILE *&hash_fp, FILE *&data_fp)
+  bool open_files(int which, 
+                  const std::string &dir, 
+                  FILE *&hash_fp, 
+                  FILE *&length_fp, 
+                  FILE *&data_fp)
   {
-    const std::string filenames[] = { IN_FILE_HASH, IN_FILE_DATA };
+    const std::string filenames[] = { IN_FILE_HASH, IN_FILE_DATA, IN_FILE_LEN };
     uint16_t count(0);
     for(auto &filename : filenames)
     {
@@ -100,6 +104,8 @@ namespace {
                 break;
         case 1: data_fp = tfp;
                 break;
+        case 2: length_fp = tfp;
+                break;
         default: std::cerr << "OH DOH!" << std::endl;
                  return false;
                  break;
@@ -112,7 +118,6 @@ namespace {
 
   void make_file(std::string const &dir, int which, int core)
   {
-    //char buf[1024];
     std::random_device rd;
     std::mt19937 rng(rd());
     auto char_dis = std::uniform_int_distribution<char>('A', 'Z');
@@ -131,43 +136,52 @@ namespace {
     }
     std::cerr << std::endl << "Affinity set to cpu " << core << "." << std::endl << std::endl;
 
-    FILE *hash_fp=0, *data_fp=0;
-    if(false == open_files(which, dir, hash_fp, data_fp))
+    FILE *hash_fp=0, *data_fp=0, *len_fp;
+    if(false == open_files(which, dir, hash_fp, len_fp, data_fp))
     {
       return;
     }
 
     constexpr auto multiple{50000};
-    std::vector<rec>hash_out(multiple);
-    std::vector<char> data_out(140*multiple);
 
-    auto accum_len{0};
+    std::vector<std::uint64_t> hash_out;
+    hash_out.reserve(multiple);
+
+    std::vector<std::uint16_t> length_out;
+    length_out.reserve(multiple);
+
+    std::vector<char> data_out;
+    data_out.reserve(140*multiple);
+
     for (int i = 0; i < 305000000/100; ++i) {
       auto iterate = i%multiple;
-      uint16_t len{len_dis(rng)};
-      accum_len+=len;
-      auto buf_start = data_out.size();
+      const std::uint16_t len{len_dis(rng)};
+      const auto buf_start = data_out.size();
       for (std::uint16_t j = 0; j < len; ++j) {
         data_out.push_back(char_dis(rng));
       }
       //*next_iter++ = '\0';
       data_out.push_back('\0');
       //tmp_rec->hash = hash(&data_out[buf_start]);
-      hash_out.push_back(rec{hash(&data_out[buf_start]), len});
+      hash_out.push_back(hash(&data_out[buf_start]));
+      length_out.push_back(len);
 
       if(iterate==(multiple-1))
       {
-        ::fwrite(&hash_out[0], sizeof(rec), hash_out.size(), hash_fp);
-        ::fwrite(&data_out[0], sizeof(char) , accum_len, data_fp);
-        accum_len=0;
-        hash_out.empty();
+        ::fwrite(hash_out.data(), sizeof(uint64_t), hash_out.size(), hash_fp);
+        ::fwrite(data_out.data(), sizeof(char) , data_out.size(), data_fp);
+        ::fwrite(length_out.data(), sizeof(uint16_t) , length_out.size() , len_fp);
+        hash_out.clear();
         hash_out.reserve(multiple);
-        data_out.empty();
+        data_out.clear();
         data_out.reserve(140*multiple);
+        length_out.clear();
+        length_out.reserve(multiple);
       }
     }
     ::fclose(hash_fp);
     ::fclose(data_fp);
+    ::fclose(len_fp);
 
   }
 }
