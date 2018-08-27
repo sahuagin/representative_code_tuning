@@ -18,7 +18,7 @@ MOUNT_XXX=${4:-"false"}
 
 
 HT_BASE=${1}/xxx_HT
-H_INDEX=${HT_BASE}/index
+H_TAB=${HT_BASE}/table
 H_DATA=${HT_BASE}/data
 
 
@@ -63,6 +63,6 @@ echo sudo zfs set recordsize=${RECORDSIZE_SEQUENTIAL} ${INPUT_BASE}
 if [ ${MOUNT_XXX} = true ]; then
   echo sudo zfs set mountpoint=${MOUNTPOINT}/HT
 fi
-echo sudo zfs create ${H_INDEX}
+echo sudo zfs create ${H_TAB}
 echo sudo zfs create ${H_DATA}
 

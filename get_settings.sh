@@ -8,28 +8,16 @@ sysctl vfs.zfs.arc_min
 sysctl hw.ncpu
 sysctl machdep.hyperthreading_allowed
 
-zfs get mountpoint test2/yyy_INPUT
-zfs get compression test2/yyy_INPUT
-zfs get atime test2/yyy_INPUT
-zfs get recordsize test2/yyy_INPUT
+POOL0=test2
+POOL1=zroot/test3
 
-zfs get mountpoint zroot/test3/yyy_INPUT
-zfs get compression zroot/test3/yyy_INPUT
-zfs get atime zroot/test3/yyy_INPUT
-zfs get recordsize zroot/test3/yyy_INPUT
-
-zfs get mountpoint test2/xxx_HT
-zfs get compression test2/xxx_HT
-zfs get atime test2/xxx_HT
-zfs get recordsize test2/xxx_HT
-
-zfs get mountpoint zroot/test3/xxx_HT
-zfs get compression zroot/test3/xxx_HT
-zfs get atime zroot/test3/xxx_HT
-zfs get recordsize zroot/test3/xxx_HT
-
-
-
-
+zfs get mountpoint ${POOL0}/yyy_INPUT ${POOL0}/xxx_HT
+zfs get mountpoint ${POOL1}/yyy_INPUT ${POOL1}/xxx_HT
+zfs get compression ${POOL0}/yyy_INPUT ${POOL0}/xxx_HT
+zfs get compression ${POOL1}/yyy_INPUT ${POOL1}/xxx_HT
+zfs get atime ${POOL0}/yyy_INPUT ${POOL0}/xxx_HT
+zfs get atime ${POOL1}/yyy_INPUT ${POOL1}/xxx_HT
+zfs get recordsize ${POOL0}/yyy_INPUT ${POOL0}/xxx_HT
+zfs get recordsize ${POOL1}/yyy_INPUT ${POOL1}/xxx_HT
 
 

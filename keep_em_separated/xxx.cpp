@@ -48,6 +48,7 @@
 #include <sys/cpuset.h>
 // for pthread_np
 #include <pthread_np.h>
+#include "directories.h"
 
 
 namespace {
@@ -71,7 +72,7 @@ namespace {
   };
 
   std::pair<void *, std::size_t>
-    map_file(int fd, bool write=true)
+    map_file(int fd, bool write=true, bool randfile=false)
     {
       std::pair<void *, std::size_t> result{nullptr, 0u};
       struct stat status;
@@ -106,9 +107,17 @@ namespace {
         return result;
       }
 #elif defined(__FreeBSD__)
-      if (::madvise(addr, filesz, MADV_RANDOM) != 0) {
-      //if (::madvise(addr, filesz, MADV_SEQUENTIAL) != 0) {
-        return result;
+      if(true==randfile)
+      {
+        if (::madvise(addr, filesz, MADV_RANDOM) != 0) {
+          return result;
+        }
+      }
+      else
+      {
+        if (::madvise(addr, filesz, MADV_SEQUENTIAL) != 0) {
+          return result;
+        }
       }
 #endif
       result.first = addr;
@@ -138,35 +147,43 @@ namespace {
       char buf[2*1024];
 
       ::mkdir(dirname.c_str(), 0775);
+      // make HT
+      ::mkdir( (dirname + HT).c_str(), 0775);
+      // make HT/table
+      ::mkdir( (dirname + HT_TABLE).c_str(), 0775);
+      // make HT/data
+      ::mkdir( (dirname + HT_DATA).c_str(), 0775);
 
-      ::sprintf(buf, "%s/tab.XXXXXX", dirname.c_str());
-      auto fd = FD(::mkstemp(buf));
-      if (fd < 0) {
-        std::cerr << "mkstemp: " << ::strerror(errno) << std::endl;
+      //::sprintf(buf, "%s/tab.XXXXXX", dirname.c_str());
+      ::sprintf(buf, TAB_TEMP.c_str(), (dirname + HT_TABLE).c_str());
+      auto tab_fd = FD(::mkstemp(buf));
+      if (tab_fd < 0) {
+        std::cerr << "mkstemp(" << buf << "): " << ::strerror(errno) << std::endl;
         return;
       }
-      if (::ftruncate(fd, table_size * sizeof(Bucket)) != 0) {
+      if (::ftruncate(tab_fd, table_size * sizeof(Bucket)) != 0) {
         std::cerr << "ftruncate: " << ::strerror(errno) << std::endl;
         return;
       }
-      tabmap = map_file(fd);
+      tabmap = map_file(tab_fd);
       if (tabmap.first == nullptr) {
         std::cerr << "map_file: " << ::strerror(errno) << std::endl;
         return;
       }
       bucket = static_cast<Bucket *>(tabmap.first);
 
-      ::sprintf(buf, "%s/dat.XXXXXX", dirname.c_str());
-      fd = FD(::mkstemp(buf));
-      if (fd < 0) {
-        std::cerr << "mkstemp: " << ::strerror(errno) << std::endl;
+      //::sprintf(buf, "%s/dat.XXXXXX", dirname.c_str());
+      ::sprintf(buf, DAT_TEMP.c_str(), (dirname + HT_DATA).c_str());
+      auto dat_fd = FD(::mkstemp(buf));
+      if (dat_fd < 0) {
+        std::cerr << "mkstemp(" << buf << "): " << ::strerror(errno) << std::endl;
         return;
       }
-      if (::ftruncate(fd, table_size*1024) != 0) {
+      if (::ftruncate(dat_fd, table_size*1024) != 0) {
         std::cerr << "ftruncate: " << ::strerror(errno) << std::endl;
         return;
       }
-      datmap = map_file(fd);
+      datmap = map_file(dat_fd);
       if (datmap.first == nullptr) {
         std::cerr << "map_file: " << ::strerror(errno) << std::endl;
         return;
@@ -198,7 +215,8 @@ namespace {
 
   void do_work(std::string const &dir, std::uint64_t which, int core)
   {
-    Table table(dir + "/HT");
+    //Table table(dir + "/HT");
+    Table table(dir + HT);
 
     std::random_device rd;
     std::mt19937 rng(rd());
@@ -220,6 +238,7 @@ namespace {
 
     which <<= 64-5;
     for (int f = 0; f < 100; ++f) {
+      /*
       char fname[128];
       ::sprintf(fname, "%s/INPUT/file.%03d", dir.c_str(), f);
       //auto fd = FD(::open(fname, O_RDWR));
@@ -237,28 +256,19 @@ namespace {
       // data is just length here
       auto len = static_cast<std::uint16_t *>(map.first);
       auto const len_end = len + map.second;
+      */
+
+      // we're going to create the keys on the fly, create the file if it isn't there already
+      // and open for write
+      char fname[128];
+      ::sprintf(fname, IN_FILE_KEY.c_str(), dir.c_str(), f);
+      auto keyid_fd = FD(::open(fname,O_RDWR | O_CREAT)); // O_SYNC ?
 
 
 
-      char buf[2*1024];
-      ::sprintf(buf, "%s/INPUT/file_key.%03d", dir.c_str(), f);
-      auto key_fd = FD(::open(buf, O_RDWR));
-      if (key_fd < 0)
-      {
-        std::cerr << "open(" << buf << ": " << ::strerror(errno) << std::endl;
-        return;
-      }
-
-      auto key_map = map_file(key_fd, true);
-      if (key_map.first == nullptr) {
-        std::cerr << "map_file: " << ::strerror(errno) << std::endl;
-        return;
-      }
-      auto key_data = reinterpret_cast<std::uint64_t *>(key_map.first);
-      auto const key_data_end = key_data + key_map.second;
 ////////////////////////////////
       char hash_buf[2*1024];
-      ::sprintf(hash_buf, "%s/INPUT/file_hash.%03d", dir.c_str(), f);
+      ::sprintf(hash_buf, IN_FILE_HASH.c_str(), dir.c_str(), f);
       auto hash_fd = FD(::open(hash_buf, O_RDONLY));
       if (hash_fd < 0)
       {
@@ -271,11 +281,14 @@ namespace {
         std::cerr << "map_file: " << ::strerror(errno) << std::endl;
         return;
       }
-      auto hash_data = reinterpret_cast<std::uint64_t *>(hash_map.first);
+      //auto hash_data = reinterpret_cast<std::uint64_t *>(hash_map.first);
+      auto hash_data = reinterpret_cast<rec *>(hash_map.first);
+
       auto const hash_data_end = hash_data + hash_map.second;
+      //auto len = reinterpret_cast<std::uint16_t *>(hash_data+1);
 //////////////////////////////////
       char data_buf[2*1024];
-      ::sprintf(data_buf, "%s/INPUT/data_runon.%03d", dir.c_str(), f);
+      ::sprintf(data_buf, IN_FILE_DATA.c_str(), dir.c_str(), f);
       auto data_fd = FD(::open(data_buf, O_RDONLY));
       if (data_fd < 0)
       {
@@ -288,42 +301,36 @@ namespace {
         std::cerr << "map_file: " << ::strerror(errno) << std::endl;
         return;
       }
-      auto runon_data = reinterpret_cast<uint64_t *>(data_map.first);
-      auto const runon_data_end = runon_data + data_map.second;
+      auto const runon_data = reinterpret_cast<std::uint8_t *>(data_map.first);
+      //auto const runon_data_end = runon_data + data_map.second;
 
-////////////////
-//
       std::uint64_t record_num = 0;
-      std::uint64_t max_records=(key_data_end-key_data)/sizeof(key_data);
+
+      //std::uint64_t max_records=(key_data_end-key_data)/sizeof(key_data);
+      std::uint64_t max_records=(hash_data_end - hash_data)/sizeof(rec);
 
       std::uint64_t  data_seek = 0;
-      while (( record_num < max_records) &&
+      while (( record_num < max_records)){/* &&
           (runon_data+data_seek < runon_data_end) && 
-          (key_data+record_num < key_data_end) && 
-          (hash_data+record_num < hash_data_end) &&
-          (len+record_num+*(len+record_num) < len_end)) {
-        auto key_ptr = reinterpret_cast<std::uint64_t *>(key_data)+record_num;
+          //(key_data+record_num < key_data_end) && 
+          (hash_data+record_num < hash_data_end)) {
+          //(len+record_num+*(len+record_num) < len_end)) {
+        */
 
-        //auto hash_ptr = hash_data++;
         auto hash_ptr = hash_data + record_num;
-        auto len_ptr = reinterpret_cast<std::uint16_t *>(len)+record_num;
-        //auto buf_ptr = reinterpret_cast<char *>(len_ptr + 1);
-        if ((*hash_ptr & 0xfc00000000000000ul) == which) {
-          const char * buf_ptr = reinterpret_cast<const char *>( runon_data ) + data_seek;
-          *key_ptr = table.insert(buf_ptr, *len_ptr, *hash_ptr);
-          //++key_ptr;
+        if ((hash_ptr->hash & 0xfc00000000000000ul) == which) {
+          const char * buf_ptr = reinterpret_cast<const char *>( runon_data  + data_seek);
+          auto key = table.insert(buf_ptr, hash_ptr->len, hash_ptr->hash);
+          auto written = ::pwrite(keyid_fd, 
+              reinterpret_cast<const void *>(&key), sizeof(key), static_cast<off_t>(record_num*sizeof(key)));
+          if(written != sizeof(key))
+          {
+            std::cerr << "keyfile wrote " << written << ":" << sizeof(key) << " bytes." << std::endl;
+          }
         }
-        //std::cerr << "len_ptr=" << *len_ptr << std::endl;
-        data_seek += *len_ptr; // size of the string
-        ////++data_seek; // move past null
-        //std::cerr << "data_seek="<< data_seek << std::endl;
-        //std::cerr << "record_num="<< record_num << std::endl;
+        data_seek += hash_ptr->len; // size of the string
         ++record_num;
-        //data = reinterpret_cast<std::uint8_t *>(buf_ptr + *len_ptr);
-        //++key_ptr;
       }
-      ::munmap(map.first, map.second);
-      ::munmap(key_map.first, key_map.second);
       ::munmap(hash_map.first, hash_map.second);
       ::munmap(data_map.first, data_map.second);
     }

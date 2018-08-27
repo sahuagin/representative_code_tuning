@@ -32,6 +32,7 @@
 // user 21m55.853s
 // sys  526m13.904s
 //
+#include <array>
 #include <cassert>
 #include <cstring>
 #include <iostream>
@@ -53,6 +54,8 @@
 // for pthread_np
 #include <pthread_np.h>
 
+#include "directories.h"
+
 
 namespace {
 
@@ -68,9 +71,15 @@ namespace {
       return result;
     }
 
-  bool open_files(int which, const std::string &dir, FILE *&fp, FILE *&hash_fp, FILE *&key_fp, FILE *&data_fp)
+  /**
+   * fp is length values only
+   * hash_fp is for the hashes only XXX eventually this will be hash:len values
+   * key_fp is for keyids only // XXX eventually, this won't be created here, it'll only be created by the xxx program
+   * data_fp is for the variable length data only
+   */
+  bool open_files(int which, const std::string &dir, FILE *&hash_fp, FILE *&data_fp)
   {
-    const std::string filenames[] = { "%s/INPUT/file.%03d", "%s/INPUT/file_hash.%03d","%s/INPUT/file_key.%03d", "%s/INPUT/data_runon.%03d" };
+    const std::string filenames[] = { IN_FILE_HASH, IN_FILE_DATA };
     uint16_t count(0);
     for(auto &filename : filenames)
     {
@@ -84,15 +93,12 @@ namespace {
         std::cerr << "error: \"" << fbuf << "\": " << strerror(errno) << std::endl;
         return false;
       }
+
       switch(count++)
       {
-        case 0: fp = tfp;
+        case 0: hash_fp = tfp; 
                 break;
-        case 1: hash_fp = tfp;
-                break;
-        case 2: key_fp = tfp;
-                break;
-        case 3: data_fp = tfp;
+        case 1: data_fp = tfp;
                 break;
         default: std::cerr << "OH DOH!" << std::endl;
                  return false;
@@ -102,15 +108,16 @@ namespace {
     return true;
   }
 
+
+
   void make_file(std::string const &dir, int which, int core)
   {
-    char buf[1024];
+    //char buf[1024];
     std::random_device rd;
     std::mt19937 rng(rd());
     auto char_dis = std::uniform_int_distribution<char>('A', 'Z');
     auto len_dis = std::uniform_int_distribution<std::uint16_t>(50, 140);
 
-    std::uint64_t key = 0u;
 
     // Create a cpu_set_t object representing a set of CPUs. Clear it and mark
     // only CPU i as set.
@@ -124,33 +131,45 @@ namespace {
     }
     std::cerr << std::endl << "Affinity set to cpu " << core << "." << std::endl << std::endl;
 
-    FILE *fp=0, *hash_fp=0, *key_fp=0, *data_fp=0;
-    if(false == open_files(which, dir, fp, hash_fp, key_fp, data_fp))
+    FILE *hash_fp=0, *data_fp=0;
+    if(false == open_files(which, dir, hash_fp, data_fp))
     {
       return;
     }
 
+    constexpr auto multiple{50000};
+    std::vector<rec>hash_out(multiple);
+    std::vector<char> data_out(140*multiple);
 
+    auto accum_len{0};
     for (int i = 0; i < 305000000/100; ++i) {
-      auto const len = len_dis(rng);
+      auto iterate = i%multiple;
+      uint16_t len{len_dis(rng)};
+      accum_len+=len;
+      auto buf_start = data_out.size();
       for (std::uint16_t j = 0; j < len; ++j) {
-        buf[j] = char_dis(rng);
+        data_out.push_back(char_dis(rng));
       }
-      buf[len] = '\0';
-      std::uint64_t h = hash(buf);
-      //::fwrite(&key, sizeof(key), 1, fp);
-      ::fwrite(&key, sizeof(key), 1, key_fp);
-      //::fwrite(&h, sizeof(h), 1, fp);
-      ::fwrite(&h, sizeof(h), 1, hash_fp);
-      ::fwrite(&len, sizeof(len), 1, fp);
-      ::fwrite(buf, 1, len, data_fp);
+      //*next_iter++ = '\0';
+      data_out.push_back('\0');
+      //tmp_rec->hash = hash(&data_out[buf_start]);
+      hash_out.push_back(rec{hash(&data_out[buf_start]), len});
+
+      if(iterate==(multiple-1))
+      {
+        ::fwrite(&hash_out[0], sizeof(rec), hash_out.size(), hash_fp);
+        ::fwrite(&data_out[0], sizeof(char) , accum_len, data_fp);
+        accum_len=0;
+        hash_out.empty();
+        hash_out.reserve(multiple);
+        data_out.empty();
+        data_out.reserve(140*multiple);
+      }
     }
-    ::fclose(fp);
-    ::fclose(key_fp);
     ::fclose(hash_fp);
     ::fclose(data_fp);
-  }
 
+  }
 }
 
 int main(int argc, char * argv[])
