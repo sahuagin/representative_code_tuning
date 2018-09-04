@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+
 sysctl_normal(){
   sysctl -d $1
   sysctl -h $1
@@ -25,7 +26,6 @@ sysctl_normal vfs.write_behind
 sysctl_normal vm.pmap.pg_ps_enabled
 sysctl_normal vm.disable_swapspace_pageouts
 
-sysctl_normal vfs.zfs.arc_max
 sysctl_in_GiB vfs.zfs.arc_max
 sysctl_in_GiB vfs.zfs.arc_min
 
@@ -34,8 +34,10 @@ sysctl_normal machdep.hyperthreading_allowed
 sysctl_normal vfs.zfs.min_auto_ashift
 sysctl_normal vfs.zfs.default_bs
 sysctl_normal security.bsd.stack_guard_page
+sysctl_normal vm.max_wired
 
 
+sysctl_normal vfs.zfs.prefetch_disable
 sysctl_normal vfs.zfs.vdev.async_write_max_active
 sysctl_normal vfs.zfs.vdev.async_write_min_active
 sysctl_normal vfs.zfs.vdev.async_read_max_active
@@ -121,5 +123,5 @@ HT=HT
 #HT=xxx_HT
 
 #zfs get mountpoint ${POOL0}/yyy_INPUT ${POOL0}/xxx_HT
-zfs get mountpoint,compression,atime,recordsize ${POOL1}/INPUT ${POOL1}/HT
+zfs get mountpoint,compression,atime,recordsize ${POOL1}/INPUT ${POOL1}/HT ${POOL1}/INPUT/data ${POOL1}/INPUT/hashid ${POOL1}/INPUT/keyid ${POOL1}/HT/data ${POOL1}/HT/table
 
