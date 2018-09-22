@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+uname -a
+freebsd-version -rk
 
 sysctl_normal(){
   sysctl -d $1
