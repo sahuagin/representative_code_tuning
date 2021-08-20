@@ -7,16 +7,14 @@ sysctl_normal(){
 }
 
 sysctl_in_GiB(){
-  sysctl -d $1
-  sysctl -h $1
+  sysctl_normal $1
   val=`sysctl -n $1`
   retval=`echo $val "/1024/1024/1024" | bc -l`
   echo $1"="$retval"GiB"
 }
 
 sysctl_in_KiB(){
-  sysctl -d $1
-  sysctl -h $1
+  sysctl_normal $1
   val=`sysctl -n $1`
   retval=`echo $val "/1024/1024" | bc -l`
   echo $1"="$retval"GiB"
